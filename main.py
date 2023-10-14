@@ -24,6 +24,8 @@ def initialize_database():
             first_name TEXT,
             last_name TEXT,
             registration_date DATE
+            total_points INTEGER
+            spent_points INTEGER
         )
     ''')
 
@@ -232,66 +234,74 @@ def process_activity_name(message):
         bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
         show_main_menu(chat_id, is_registered=True)
 
-# Обработчик ввода фотографии
+
 # Обработчик ввода фотографии
 def process_confirmation_photo(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    confirmation_photo = message.photo  # Получаем фотографию из сообщения
 
-    if not confirmation_photo:
-        bot.send_message(chat_id, "Пожалуйста, отправьте фотографию вместо текстовой ссылки.")
-        show_main_menu(chat_id, is_registered=True)  # Вернуть пользователя на главное меню
-        return
+    if message.content_type == 'photo':
+        confirmation_photo = message.photo[-1]  # Получаем фотографию из сообщения
 
-    if chat_id in user_states and "category" in user_states[chat_id] and "activity" in user_states[chat_id]:
-        category = user_states[chat_id]["category"]
-        activity_name = user_states[chat_id]["activity"]
-        subcategory = user_states[chat_id].get("subcategory", "")
+        if chat_id in user_states and "category" in user_states[chat_id] and "activity" in user_states[chat_id]:
+            category = user_states[chat_id]["category"]
+            activity_name = user_states[chat_id]["activity"]
+            subcategory = user_states[chat_id].get("subcategory", "")
 
-        conn = sqlite3.connect('database_aleksey.db')
-        cursor = conn.cursor()
+            conn = sqlite3.connect('database_aleksey.db')
+            cursor = conn.cursor()
 
-        cursor.execute("SELECT first_name, last_name FROM users WHERE telegram_id=?", (user_id,))
-        user_data = cursor.fetchone()
-        if user_data:
-            first_name, last_name = user_data
+            cursor.execute("SELECT first_name, last_name FROM users WHERE telegram_id=?", (user_id,))
+            user_data = cursor.fetchone()
+            if user_data:
+                first_name, last_name = user_data
+            else:
+                first_name, last_name = "", ""
+
+            # Создаем папку для загрузки, если она не существует
+            upload_folder = os.path.join('uploads', datetime.now().strftime('%Y_%m'))
+            os.makedirs(upload_folder, exist_ok=True)
+
+            # Формируем имя файла на основе данных пользователя и текущей даты
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            filename = f"{first_name}_{last_name}_{activity_name}_{category}_{subcategory}_{current_date}.jpg"  # Измените расширение, если необходимо
+
+            # Сохраняем фотографию на сервере в соответствующей папке
+            photo_id = confirmation_photo.file_id
+            photo_info = bot.get_file(photo_id)
+            photo_extension = os.path.splitext(photo_info.file_path)[1]
+            photo_filename = os.path.join(upload_folder, filename + photo_extension)
+
+            photo_file = bot.download_file(photo_info.file_path)  # Здесь получаем байты фотографии
+            with open(photo_filename, 'wb') as photo:
+                photo.write(photo_file)  # Записываем байты в файл
+
+            # Формируем ссылку на фотографию на сервере
+            photo_link = photo_filename
+
+            # Обновляем запись в таблице activities, добавляя имя фотографии в поле confirm
+            cursor.execute("INSERT INTO activities (telegram_id, first_name, last_name, activity, add_date, points, category, subcategory, confirm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (user_id, first_name, last_name, activity_name, datetime.now(), 0, category, subcategory, photo_link))
+            conn.commit()
+
+            bot.send_message(chat_id, f"Активность '{activity_name}' успешно добавлена в категорию '{category}'.")
+            show_main_menu(chat_id, is_registered=True)
+
+            conn.close()
         else:
-            first_name, last_name = "", ""
-
-        # Создаем папку для загрузки, если она не существует
-        upload_folder = os.path.join('uploads', datetime.now().strftime('%Y_%m'))
-        os.makedirs(upload_folder, exist_ok=True)
-
-        # Формируем имя файла на основе данных пользователя и текущей даты
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        filename = f"{first_name}_{last_name}_{activity_name}_{category}_{subcategory}_{current_date}.jpg"  # Измените расширение, если необходимо
-
-        # Сохраняем фотографию на сервере в соответствующей папке
-        photo_id = confirmation_photo[-1].file_id
-        photo_info = bot.get_file(photo_id)
-        photo_extension = os.path.splitext(photo_info.file_path)[1]
-        photo_filename = os.path.join(upload_folder, filename + photo_extension)
-
-        photo_file = bot.download_file(photo_info.file_path)  # Здесь получаем байты фотографии
-        with open(photo_filename, 'wb') as photo:
-            photo.write(photo_file)  # Записываем байты в файл
-
-        # Формируем ссылку на фотографию на сервере
-        photo_link = photo_filename
-
-        # Обновляем запись в таблице activities, добавляя имя фотографии в поле confirm
-        cursor.execute("INSERT INTO activities (telegram_id, first_name, last_name, activity, add_date, points, category, subcategory, confirm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, first_name, last_name, activity_name, datetime.now(), 0, category, subcategory, photo_link))
-        conn.commit()
-
-        bot.send_message(chat_id, f"Активность '{activity_name}' успешно добавлена в категорию '{category}'.")
-        show_main_menu(chat_id, is_registered=True)
-
-        conn.close()
+            bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
+            show_main_menu(chat_id, is_registered=True)
     else:
-        bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
-        show_main_menu(chat_id, is_registered=True)
+        if message.text.lower() == "отмена":
+            show_main_menu(chat_id, is_registered=True)
+        else:
+            bot.send_message(chat_id, "Пожалуйста, отправьте фотографию вместо текстовой ссылки.")
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            markup.add(types.KeyboardButton("Отмена"))
+            bot.send_message(chat_id, "Отправьте фотографию, которая подтверждает ваше участие:", reply_markup=markup)
+            bot.register_next_step_handler(message, process_confirmation_photo)  # Рекурсивный вызов обработчика
+
+
 # Функция для просмотра активностей пользователя
 def view_activities(message):
     chat_id = message.chat.id
