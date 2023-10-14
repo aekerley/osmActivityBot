@@ -460,6 +460,7 @@ def decrease_stock(product_id):
     conn.close()
 
 
+
 # Функция для увеличения суммы потраченных средств
 
 def increase_spent_points(user_id, product_id):
