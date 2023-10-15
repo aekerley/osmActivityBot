@@ -154,6 +154,10 @@ def process_name(message):
 def show_main_menu(chat_id, user_id, is_registered=True):
     calculate_total_points(user_id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    user_id = message.from_user.id  # Получаем telegram_id пользователя
+    write_total_points(user_id)
+
     if is_registered:
         markup.row(types.KeyboardButton("Добавить активность⚡"))
         markup.row(types.KeyboardButton("Посмотреть активности"), types.KeyboardButton("Баллы"))
@@ -392,8 +396,6 @@ def show_store(message):
     chat_id = message.chat.id
     bot.send_message(chat_id, "Вы находитесь в разделе 'Магазин'.", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add(types.KeyboardButton("Отмена")))
 
-    user_id = message.from_user.id  # Получаем telegram_id пользователя
-    write_total_points(user_id)
 
     # Получение списка товаров из базы данных
     conn = sqlite3.connect('database_aleksey.db')
