@@ -592,7 +592,6 @@ def write_total_points(telegram_id):
     conn.close()
 
 
-
 # Глобальные переменные
 user_states = {}
 images_path = "img"
