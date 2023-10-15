@@ -24,7 +24,7 @@ def initialize_database():
             first_name TEXT,
             last_name TEXT,
             registration_date DATE,
-            total_points INTEGER,
+            total_points INTEGER DEFAULT 0,
             spent_points INTEGER DEFAULT 0
         )
     ''')
@@ -49,7 +49,7 @@ def initialize_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS store (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
+            product_name TEXT,
             price REAL,
             stock INTEGER
         )
@@ -60,7 +60,10 @@ def initialize_database():
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
+            first_name TEXT,
+            last_name TEXT,
             product_id INTEGER,
+            product_name TEXT,
             purchase_date DATE,
             quantity INTEGER
         )
@@ -112,7 +115,7 @@ def start(message):
 
     if user_data:
         bot.send_message(chat_id, f'Привет, {message.from_user.first_name}!')
-        show_main_menu(chat_id)
+        show_main_menu(chat_id, user_id)
     else:
         bot.send_sticker(chat_id, 'CAACAgIAAxkBAAEKd49lIFNBWnDhlTHEenvgIZpi-RNSvAACtCMAAkHhEEnpzviG2GDu2jAE')
         bot.send_message(chat_id, f'Привет! Говорят тебя зовут {message.from_user.first_name}. А как мне тебя записать?')
@@ -143,12 +146,13 @@ def process_name(message):
 
     bot.send_message(chat_id, f"Спасибо, {first_name} {last_name}! Вы успешно зарегистрированы.")
     bot.send_sticker(chat_id, 'CAACAgIAAxkBAAEKd4dlIFLL2aPfSPUkO-KC_fCmP19zFwAC_BoAAvfa2EubQGsWnyAuVjAE')
-    show_main_menu(chat_id)
+    show_main_menu(chat_id, user_id)
 
     conn.close()
 
 # Функция для отображения основного меню с кнопками
-def show_main_menu(chat_id, is_registered=True):
+def show_main_menu(chat_id, user_id, is_registered=True):
+    calculate_total_points(user_id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if is_registered:
         markup.row(types.KeyboardButton("Добавить активность⚡"))
@@ -165,6 +169,7 @@ def show_main_menu(chat_id, is_registered=True):
 def handle_buttons(message):
     chat_id = message.chat.id
     text = message.text
+    user_id = message.from_user.id
 
     if text == "Добавить активность⚡":
         # Отправляем список категорий активностей
@@ -176,9 +181,9 @@ def handle_buttons(message):
     elif text == "Магазин":
         show_store(message)
     elif text == "/start":
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
     elif text == "Отмена":
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
 
 # Функция для отправки списка категорий активностей
 def send_activity_categories(chat_id):
@@ -193,13 +198,13 @@ def send_activity_categories(chat_id):
 # Обработчик выбора категории активности
 def process_activity_category(message):
     chat_id = message.chat.id
+    user_id = message.from_user.id  # Получаем ID пользователя
     text = message.text
 
     if text == "Отмена":
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
         return
 
-    user_id = message.from_user.id
     user_states[chat_id] = {"category": text}
 
     if text in activity_subcategories:
@@ -217,10 +222,11 @@ def process_activity_category(message):
 # Обработчик выбора подкатегории активности
 def process_activity_subcategory(message):
     chat_id = message.chat.id
+    user_id = message.from_user.id  # Получаем ID пользователя
     text = message.text
 
     if text == "Отмена":
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
         return
 
     if chat_id in user_states and "category" in user_states[chat_id]:
@@ -233,7 +239,7 @@ def process_activity_subcategory(message):
         bot.register_next_step_handler(message, process_activity_name)
     else:
         bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
 
 # Обработчик ввода названия активности
 def process_activity_name(message):
@@ -242,7 +248,7 @@ def process_activity_name(message):
     activity_name = message.text
 
     if activity_name == "Отмена":
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
         return
 
     if chat_id in user_states and "category" in user_states[chat_id]:
@@ -257,7 +263,7 @@ def process_activity_name(message):
         bot.register_next_step_handler(message, process_confirmation_photo)
     else:
         bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
-        show_main_menu(chat_id, is_registered=True)
+        show_main_menu(chat_id, user_id, is_registered=True)
 
 
 # Обработчик ввода фотографии
@@ -310,15 +316,15 @@ def process_confirmation_photo(message):
             conn.commit()
 
             bot.send_message(chat_id, f"Активность '{activity_name}' успешно добавлена в категорию '{category}'.")
-            show_main_menu(chat_id, is_registered=True)
+            show_main_menu(chat_id, user_id, is_registered=True)
 
             conn.close()
         else:
             bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните процесс добавления активности заново.")
-            show_main_menu(chat_id, is_registered=True)
+            show_main_menu(chat_id, user_id, is_registered=True)
     else:
-        if message.text.lower() == "отмена":
-            show_main_menu(chat_id, is_registered=True)
+        if message.text.lower() == "Отмена":
+            show_main_menu(chat_id, user_id, is_registered=True)
         else:
             bot.send_message(chat_id, "Пожалуйста, отправьте фотографию вместо текстовой ссылки.")
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -365,23 +371,37 @@ def view_points(message):
 
     conn.close()
 
-    if total_points is not None:
+    if total_points != 0:
         available_points = total_points - spent_points
         bot.send_message(chat_id, f"Ваши баллы: {available_points}\n*Баллы обновляются 1 числа каждого месяца!")
     else:
         bot.send_message(chat_id, "У вас пока нет баллов.\n*Баллы обновляются 1 числа каждого месяца!", parse_mode='html')
 
+# Настройка подключения к базе данных
+def get_product(product_id):
+    conn = sqlite3.connect('database_aleksey.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT product_name, price, stock FROM store WHERE id=?", (product_id,))
+    product_info = cursor.fetchone()
+    conn.close()
+    return product_info
+
+# Обработка команды "Магазин"
 @bot.message_handler(func=lambda message: message.text == "Магазин")
 def show_store(message):
     chat_id = message.chat.id
     bot.send_message(chat_id, "Вы находитесь в разделе 'Магазин'.", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add(types.KeyboardButton("Отмена")))
 
-    # Получите список товаров из таблицы store
+    user_id = message.from_user.id  # Получаем telegram_id пользователя
+    write_total_points(user_id)
+
+    # Получение списка товаров из базы данных
     conn = sqlite3.connect('database_aleksey.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, price, stock FROM store")
+    cursor.execute("SELECT id, product_name, price, stock FROM store")
     products = cursor.fetchall()
     conn.close()
+
 
     if not products:
         bot.send_message(chat_id, "В магазине нет доступных товаров.")
@@ -390,8 +410,8 @@ def show_store(message):
         keyboard = types.InlineKeyboardMarkup(row_width=2)
 
         for product in products:
-            product_id, name, price, stock = product
-            item_text = f"{name} - ${price} (В наличии: {stock} шт.)"
+            product_id, product_name, price, stock = product
+            item_text = f"{product_name} - ⚡{int(price)} (В наличии: {stock} шт.)"
             callback_data = f"buy_{product_id}"
 
             button = types.InlineKeyboardButton(item_text, callback_data=callback_data)
@@ -400,29 +420,21 @@ def show_store(message):
         bot.send_message(chat_id, store_info, reply_markup=keyboard)
         bot.send_message(chat_id, "Выберите товар или введите другую команду.")
 
-# Обработчик для инлайн-кнопок товаров
+# Обработка нажатия на кнопку "Купить"
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def handle_buy_callback(call):
     product_id = int(call.data.replace("buy_", ""))
-
-    # Получите информацию о товаре из таблицы store
-    conn = sqlite3.connect('database_aleksey.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, price, stock FROM store WHERE id=?", (product_id,))
-    product_info = cursor.fetchone()
-    conn.close()
+    product_info = get_product(product_id)
 
     if product_info:
-        name, price, stock = product_info
-        message_text = f"{name} - ${price}\nВ наличии: {stock} шт."
+        product_name, price, stock = product_info
+        message_text = f"{product_name} - ⚡{int(price)}\nВ наличии: {stock} шт."
 
-        # Получите путь к изображению товара
-        images_path = 'img/'  # Укажите путь к папке с изображениями
+        # Проверка существования файла изображения товара
+        images_path = 'img/'
         image_filename = os.path.join(images_path, f"{product_id}.png")
 
-        # Проверяем, существует ли файл изображения
         if os.path.isfile(image_filename):
-            # Отправляем изображение товара с подписью и инлайн-клавиатурой
             with open(image_filename, 'rb') as image_file:
                 bot.send_photo(call.message.chat.id, image_file, caption=message_text, reply_markup=create_confirmation_keyboard(product_id))
         else:
@@ -430,24 +442,89 @@ def handle_buy_callback(call):
     else:
         bot.send_message(call.message.chat.id, "Информация о товаре не найдена.")
 
-# Функция для создания инлайн-клавиатуры "Купить"
+# Функция для создания клавиатуры "Купить"
 def create_confirmation_keyboard(product_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     buy_button = types.InlineKeyboardButton("Купить", callback_data=f"confirm_buy_{product_id}")
     keyboard.add(buy_button)
     return keyboard
 
-# Обработчик для инлайн-кнопок "Купить"
+# Обработка нажатия на кнопку "Купить"
 @bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
 def handle_buy_button_callback(call):
+    user_id = call.from_user.id
     product_id = int(call.data.replace("confirm_buy_", ""))
+    quantity = 1  # Установите желаемое количество товаров здесь
 
-    # Здесь вы можете добавить логику покупки товара
-    increase_spent_points(call.message.chat.id, product_id)
-    # Уменьшаем количество товара на складе
-    decrease_stock(product_id)
+    # Получите баланс баллов пользователя из базы данных
+    user_balance = calculate_total_points(user_id)
 
-    bot.send_message(call.message.chat.id, f"Вы успешно купили товар с ID {product_id}. Сумма покупки добавлена в spent_points.")
+    # Получите информацию о товаре
+    product_info = get_product(product_id)
+
+    if product_info:
+        product_name, price, stock = product_info
+
+        if user_balance >= price and stock >= quantity:
+            # Получите информацию о пользователе (имя и фамилию)
+            user_info = get_user_info(user_id)
+            if user_info:
+                first_name, last_name = user_info
+                # Пользователь имеет достаточно баллов и товар в наличии, чтобы купить товар
+                increase_spent_points(user_id, product_id)
+                decrease_stock(product_id)
+                # Вызов функции для добавления записи о покупке
+                insert_purchase(user_id, first_name, last_name, product_id, product_name, datetime.now(), quantity)
+                bot.send_message(call.message.chat.id, f"Вы успешно купили товар с ID {product_id}. Сумма покупки добавлена в spent_points.")
+            else:
+                bot.send_message(call.message.chat.id, "Информация о пользователе не найдена.")
+        else:
+            # Пользователь не имеет достаточно баллов или товара в наличии
+            if user_balance < price:
+                bot.send_message(call.message.chat.id, "У вас недостаточно баллов для покупки этого товара.")
+            else:
+                bot.send_message(call.message.chat.id, "Извините, товара недостаточно на складе.")
+    else:
+        bot.send_message(call.message.chat.id, "Информация о товаре не найдена.")
+
+
+def insert_purchase(user_id, first_name, last_name, product_id, product_name, purchase_date, quantity):
+    conn = sqlite3.connect('database_aleksey.db')
+    cursor = conn.cursor()
+
+    cursor.execute("INSERT INTO purchases (user_id, first_name, last_name, product_id, product_name, purchase_date, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   (user_id, first_name, last_name, product_id, product_name, purchase_date, quantity))
+
+    conn.commit()
+    conn.close()
+
+#Получаем имя и фамилию для таблицы purchases
+def get_user_info(telegram_id):
+    conn = sqlite3.connect('database_aleksey.db')
+    cursor = conn.cursor()
+
+    # Получите имя и фамилию пользователя из таблицы "users" по telegram_id
+    cursor.execute("SELECT first_name, last_name FROM users WHERE telegram_id=?", (telegram_id,))
+    user_info = cursor.fetchone()
+
+    conn.close()
+    return user_info  # Вернет кортеж (first_name, last_name) или None, если пользователь не найден
+
+# Обработка команды "Отмена"
+@bot.message_handler(func=lambda message: message.text == "Отмена")
+def cancel(message):
+    chat_id = message.chat.id
+    show_main_menu(chat_id, user_id, is_registered=True)
+
+# Обработчик для покупок
+@bot.message_handler(func=lambda message: message.text.startswith("buy_"))
+def handle_purchase(message):
+    product_id = int(message.text.replace("buy_", ""))
+    user_id = message.from_user.id
+    quantity = 1  # Это может быть количество товаров, которые пользователь хочет купить
+
+    # Вызываем функцию для обработки покупки, передавая user_id и product_id
+    handle_purchase(user_id, product_id, quantity)
 
 def decrease_stock(product_id):
     conn = sqlite3.connect('database_aleksey.db')
@@ -458,8 +535,6 @@ def decrease_stock(product_id):
 
     conn.commit()
     conn.close()
-
-
 
 # Функция для увеличения суммы потраченных средств
 
@@ -476,7 +551,47 @@ def increase_spent_points(user_id, product_id):
 @bot.message_handler(commands=['Отмена'])
 def cancel(message):
     chat_id = message.chat.id
-    show_main_menu(chat_id, is_registered=True)
+    show_main_menu(chat_id, user_id, is_registered=True)
+
+#Вычисление баллов пользователя
+def calculate_total_points(user_id):
+    conn = sqlite3.connect('database_aleksey.db')
+    cursor = conn.cursor()
+
+    # Получите баланс баллов пользователя из таблицы "users" по telegram_id
+    cursor.execute("SELECT total_points, spent_points FROM users WHERE telegram_id=?", (user_id,))
+    user_info = cursor.fetchone()
+
+    conn.close()
+
+    if user_info:
+        total_points, spent_points = user_info
+        if total_points is not None and spent_points is not None:
+            balance = total_points - spent_points  # Вычисление баланса
+            return balance
+        else:
+            return 0  # Если значение `total_points` или `spent_points` равно `None`, возвращаем 0
+    else:
+        return 0  # Если пользователь не найден, возвращаем 0
+
+# Запись баллов пользователя
+def write_total_points(telegram_id):
+    # Установите подключение к базе данных
+    conn = sqlite3.connect('database_aleksey.db')
+    cursor = conn.cursor()
+
+    # Вычислите сумму баллов полей `points` из таблицы `activities` для данного `telegram_id`
+    cursor.execute("SELECT SUM(points) FROM activities WHERE telegram_id=?", (telegram_id,))
+    total_points = cursor.fetchone()[0]
+
+    # Обновите поле `total_points` в таблице `users` для данного `telegram_id`
+    cursor.execute("UPDATE users SET total_points = ? WHERE telegram_id=?", (total_points, telegram_id))
+
+    # Сохраните изменения и закройте соединение с базой данных
+    conn.commit()
+    conn.close()
+
+
 
 # Глобальные переменные
 user_states = {}
